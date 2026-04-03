@@ -1,0 +1,13 @@
+[project]
+name = "solar-info"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "datetime>=6.0",
+    "ephem>=4.2.1",
+    "logging>=0.4.9.6",
+    "pathlib>=1.0.1",
+    "rich>=14.3.3",
+]
