@@ -19,7 +19,7 @@ from rich.theme import Theme
 
 # ---------- Set up LOGGER
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.WARNING)
 formatter = logging.Formatter("%(asctime)s:%(levelname)s:%(name)s:%(message)s")
 file_handler = logging.FileHandler("sunny_times.log")
 file_handler.setFormatter(formatter)
@@ -45,8 +45,8 @@ def main():
     home.lat = "41.96247219"
     home.lon = "-71.677855830"
     home.elevation = 118  # in whole meters
-    given_date = datetime.now()
-    # logger.info(f"Given date: {given_date}")
+    given_date = date.today()
+    logger.info(f"Given date: {given_date}")
     sun = ephem.Sun()
     moon = ephem.Moon()
 
@@ -57,7 +57,7 @@ def main():
     local_sunset = ephem.localtime(sunset)
     daylight: timedelta = local_sunset - local_sunrise
     given_date_daylight: str = format_timedelta_hms(daylight)
-
+    logger.info(f"tdy_daylight {given_date_daylight}")
     transit_time = home.next_transit(sun)  # solar noon
     tran_time = ephem.localtime(transit_time)  # solar noon local time
     home.date = transit_time
@@ -74,6 +74,7 @@ def main():
     home.horizon = "0"
     last_solstice = find_previous_solstice(given_date)
     logger.info(f"Last solstice: {last_solstice}")
+
     # Retrieves length of daylight on last solstice:
     sol_daylight: timedelta = get_daylight_diff(last_solstice[0], home)
 
@@ -88,14 +89,13 @@ def main():
     full_moon = ephem.next_full_moon(given_date)
     new_moon = ephem.next_new_moon(given_date)
 
-    # logger.info(f"Last solstice 1: {last_solstice[1]}")
-    # logger.info(f"Last solstice 0: {last_solstice[0]}")
-    # logger.info(
-    #     f"today_length: {sol_daylight}; solstice_length: {daylight}; diff: {diff}"
-    # )
+    logger.info(f"Last solstice 1: {last_solstice[1]}")
+    logger.info(f"Last solstice 0: {last_solstice[0]}")
+    logger.info(
+        f"today_length: {sol_daylight}; solstice_length: {daylight}; diff: {diff}"
+    )
 
     # Set up variables for printing:
-    # date_today = date.today().strftime("%a, %b %d, %Y")
     date_today = given_date.strftime("%a, %b %d, %Y")
     first_light = "Civil Twilight"
     rise = "Sunrise"
@@ -131,14 +131,13 @@ def main():
 
     csv_data = {
         "Date": date.today(),
-        "Sunrise": sunrise,
-        "Sunset": sunset,
-        "Length of Daylight": given_date_daylight,
+        "Sunrise": local_sunrise.strftime("%H:%M:%S"),
+        "Sunset": local_sunset.strftime("%H:%M:%S"),
         "Diff from Solstice": diff,
-        "Solar Noon": solar_noon,
+        "Solar Noon": tran_time.strftime("%H:%M:%S"),
         "Sun Elevation": round(max_alt_degrees, 2),
+        "Length of Daylight": given_date_daylight,
     }
-
     # ****************************************
 
     # Print to console:
@@ -159,17 +158,16 @@ def main():
     )
 
     # Print to text file:
-
-    if not txt_file_path.exists() or date.fromtimestamp(txt_file_path.stat().st_mtime) < date.today():
-        with open(txt_file_path, "w") as file:
-            file.write(results)
+    with open(txt_file_path, "w") as file:
+        file.write(results)
 
     # Print to csv file:
-    if not csv_file_path.exists() or date.fromtimestamp(csv_file_path.stat().st_mtime)<date.today():
-        with open(csv_file_path, "w") as file:
-            writer = csv.DictWriter(file, fieldnames=csv_data.keys())
-            if not csv_file_path.exists():
-                writer.writeheader()
+    file_exists = csv_file_path.exists()
+    with open(csv_file_path, mode="a", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=csv_data.keys())
+        if not file_exists:
+            writer.writeheader()
+
         writer.writerow(csv_data)
 
 
@@ -227,4 +225,7 @@ def format_timedelta_hms(td: timedelta) -> str:
 
 
 if __name__ == "__main__":
-    main()
+    if date.fromtimestamp(csv_file_path.stat().st_mtime) < date.today():
+        main()
+    else:
+        print("\n\nYOU'VE ALREADY RUN THE SCRIPT TODAY !!! \n")
