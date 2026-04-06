@@ -9,13 +9,10 @@
 import csv
 import logging
 from pathlib import Path
-from datetime import date, timedelta, datetime
+from datetime import date, timedelta
 
 import ephem
 from ephem import Observer
-from rich.console import Console
-from rich.panel import Panel
-from rich.theme import Theme
 
 # ---------- Set up LOGGER
 logger = logging.getLogger(__name__)
@@ -38,6 +35,8 @@ def main():
     sunset and length of daylight for today,
     and computes the difference in amount of daylight
     from the last solstice to today"""
+
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     # SET BASE INFORMATION FOR THE OBSERVER --->
     # Coordinates are for home @ 233 Liberty Ln, Harrisville RI:
@@ -99,7 +98,7 @@ def main():
     date_today = given_date.strftime("%a, %b %d, %Y")
     first_light = "Civil Twilight"
     rise = "Sunrise"
-    set = "Sunset"
+    set_ = "Sunset"
     last_light = "Civil Twilight"
     length = "Length of Daylight"
     solar_noon = "Solar Noon"
@@ -111,23 +110,28 @@ def main():
     next_new = "Next New Moon"
 
     # Console text:
-    results: str = f"""[info]
-    Information for {date_today} \n
-    {first_light:.<24} {am_twilight.strftime("%H:%M:%S")}
-    {rise:.<24} {local_sunrise.strftime("%H:%M:%S")}
-    {set:.<24} {local_sunset.strftime("%H:%M:%S")}
-    {last_light:.<24} {pm_twilight.strftime("%H:%M:%S")}\n
-    {solar_noon:.<24} {tran_time.strftime("%H:%M:%S")}
-    {max_elev:.<24} {max_alt_degrees:.2f}º\n
-    {length:.<24} {given_date_daylight} \n
-    {last:.<24} {last_solstice[0].strftime("%a, %b %d @ %H:%M")} \n
-    {lost:.<24} {diff} \n
-    ****************************************
+    results: str = f"""
+Information for {date_today}
 
-    {moon_up:.<24} {ephem.localtime(moon_rise).strftime("%H:%M:%S")}
-    {next_full:.<24} {ephem.localtime(full_moon).strftime("%a, %b %d %Y @ %H:%M")}
-    {next_new:.<24} {ephem.localtime(new_moon).strftime("%a, %b %d %Y @ %H:%M")}  [/info]
-    """
+{first_light:.<24} {am_twilight.strftime("%H:%M:%S")}
+{rise:.<24} {local_sunrise.strftime("%H:%M:%S")}
+{set_:.<24} {local_sunset.strftime("%H:%M:%S")}
+{last_light:.<24} {pm_twilight.strftime("%H:%M:%S")}
+
+{solar_noon:.<24} {tran_time.strftime("%H:%M:%S")}
+{max_elev:.<24} {max_alt_degrees:.2f}º
+
+{length:.<24} {given_date_daylight}
+
+{last:.<24} {last_solstice[0].strftime("%a, %b %d @ %H:%M")}
+{lost:.<24} {diff}
+
+****************************************
+
+{moon_up:.<24} {ephem.localtime(moon_rise).strftime("%H:%M:%S")}
+{next_full:.<24} {ephem.localtime(full_moon).strftime("%a, %b %d %Y @ %H:%M")}
+{next_new:.<24} {ephem.localtime(new_moon).strftime("%a, %b %d %Y @ %H:%M")}
+""".strip()
 
     csv_data = {
         "Date": date.today(),
@@ -141,29 +145,17 @@ def main():
     # ****************************************
 
     # Print to console:
-    custom_theme = Theme(
-        {"info": "gold1", "danger": "magenta2 italic", "success": "green"}
-    )
-    console = Console(theme=custom_theme)
-
     print()
+    print(results)
     print()
-    console.print(
-        Panel.fit(
-            results,
-            title="Daily Ephemeris Information",
-            border_style="red",
-            title_align="left",
-        )
-    )
 
     # Print to text file:
-    with open(txt_file_path, "w") as file:
-        file.write(results)
+    with open(txt_file_path, "w", encoding="utf-8") as file:
+        file.write(results + "\n")
 
     # Print to csv file:
     file_exists = csv_file_path.exists()
-    with open(csv_file_path, mode="a", newline="") as f:
+    with open(csv_file_path, mode="a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=csv_data.keys())
         if not file_exists:
             writer.writeheader()
@@ -175,35 +167,31 @@ def main():
 
 def find_previous_solstice(given_date: date) -> tuple:
     """
-    Simplified version that finds the most recent solstice before given_date.
+    Finds the most recent solstice before given_date.
     """
-    # Start from the given date and work backwards
-    current_date = ephem.Date(given_date)
+    prev_summer = None
+    prev_winter = None
 
-    # Find the previous summer solstice
     try:
         prev_summer = ephem.previous_summer_solstice(given_date)
     except Exception as e:
-        print(e)
+        logger.warning("Could not determine previous summer solstice: %s", e)
 
-    # Find the previous winter solstice
     try:
-        prev_winter = ephem.previous_winter_solstice(current_date)
+        prev_winter = ephem.previous_winter_solstice(given_date)
     except Exception as e:
-        print(e)
+        logger.warning("Could not determine previous winter solstice: %s", e)
 
-    # Return the more recent one
     if prev_summer and prev_winter:
         if prev_summer > prev_winter:
             return prev_summer.datetime(), "summer"
-        else:
-            return prev_winter.datetime(), "winter"
+        return prev_winter.datetime(), "winter"
     elif prev_summer:
         return prev_summer.datetime(), "summer"
     elif prev_winter:
         return prev_winter.datetime(), "winter"
     else:
-        return ("Can't find any solstice",)
+        raise RuntimeError("Can't find any solstice")
 
 
 def get_daylight_diff(sol_date: date, home):
@@ -225,7 +213,10 @@ def format_timedelta_hms(td: timedelta) -> str:
 
 
 if __name__ == "__main__":
-    if date.fromtimestamp(csv_file_path.stat().st_mtime) < date.today():
-        main()
+    if csv_file_path.exists():
+        if date.fromtimestamp(csv_file_path.stat().st_mtime) < date.today():
+            main()
+        else:
+            print("\n\nYOU'VE ALREADY RUN THE SCRIPT TODAY !!! \n")
     else:
-        print("\n\nYOU'VE ALREADY RUN THE SCRIPT TODAY !!! \n")
+        main()
