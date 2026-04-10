@@ -9,7 +9,7 @@
 import csv
 import logging
 from pathlib import Path
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 import math
 import ephem
 from ephem import Observer
@@ -31,8 +31,15 @@ output_dir: Path = path / "Sun_output"
 txt_file_path: Path = output_dir / "ephemeris_info.txt"
 csv_file_path: Path = output_dir / "daylight_info.csv"
 
+# Compute the mirror date from today:
+tdy = date.today()
+summer_sol = date(2026, 6, 21)
+diff = summer_sol - tdy
+mirror = summer_sol + diff
+tdy_mirror = ephem.Date(f'{mirror.year}/{mirror.month}/{mirror.day} 01:00:00')
 
-def main(tdy):
+
+def main():
     """Retrieves the time of sunrise and
     sunset and length of daylight for today,
     and computes the difference in amount of daylight
@@ -93,6 +100,15 @@ def main(tdy):
     full_moon = ephem.next_full_moon(start_tdy)
     new_moon = ephem.next_new_moon(start_tdy)
 
+    # Get some sun info for mirror date:
+    # home.date = tdy_mirror
+    mirror_sunrise = home.next_rising(sun, start=tdy_mirror)
+    local_mirror_sunrise = ephem.localtime(mirror_sunrise)
+    home.date = mirror_sunrise
+    sun.compute(home)
+    mirror_az = (round(math.degrees(float(sun.az)), 1))
+    mirror_alt = float(sun.alt) * 180 / ephem.pi
+
     # Set up variables for printing:
     date_today = tdy.strftime("%a, %b %d, %Y")
     first_light = "Civil Twilight"
@@ -109,6 +125,8 @@ def main(tdy):
     moon_up = "Moon Rise"
     next_full = "Next Full Moon"
     next_new = "Next New Moon"
+    mirror_rise = "Sunrise @ mirror date"
+    mirror_azimuth = "Azimuth @ mirror date"
 
     # Console text:
     results: str = f"""
@@ -129,11 +147,17 @@ Information for {date_today}
 {last:.<24} {last_solstice[0].strftime("%a, %b %d @ %H:%M")}
 {lost:.<24} {diff}
 
-****************************************
-
 {moon_up:.<24} {ephem.localtime(moon_rise).strftime("%H:%M:%S")}
 {next_full:.<24} {ephem.localtime(full_moon).strftime("%a, %b %d %Y @ %H:%M")}
 {next_new:.<24} {ephem.localtime(new_moon).strftime("%a, %b %d %Y @ %H:%M")}
+
+****************************************
+
+Mirror Date is →  {mirror.strftime("%a, %b %d, %Y")}
+
+{mirror_rise:.<24} {local_mirror_sunrise.strftime("%H:%M:%S")}
+{mirror_azimuth:.<24} {mirror_az}
+
 """.strip()
 
     csv_data = {
@@ -146,6 +170,7 @@ Information for {date_today}
         "Solar Noon": tran_time.strftime("%H:%M:%S"),
         "Sun Elevation": round(max_alt_degrees, 2),
         "Length of Daylight": tdy_daylight,
+        "Mirror Date": mirror,
     }
     # ****************************************
 
@@ -157,15 +182,19 @@ Information for {date_today}
     # Print to text file:
     with open(txt_file_path, "w", encoding="utf-8") as file:
         file.write(results + "\n")
-    #
+
     # # Print to csv file:
-    # file_exists = csv_file_path.exists()
-    # with open(csv_file_path, mode="a", newline="", encoding="utf-8") as f:
-    #     writer = csv.DictWriter(f, fieldnames=csv_data.keys())
-    #     if not file_exists:
-    #         writer.writeheader()
-    #
-    #     writer.writerow(csv_data)
+    file_exists = csv_file_path.exists()
+
+    if date.fromtimestamp(csv_file_path.stat().st_mtime) < tdy:
+        with open(csv_file_path, mode="a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=csv_data.keys())
+            if not file_exists:
+                writer.writeheader()
+
+            writer.writerow(csv_data)
+    else:
+        print("\n\nYOU'VE ALREADY RUN THE SCRIPT TODAY !!! \n")
 
 
 # ****************************************
@@ -218,11 +247,11 @@ def format_timedelta_hms(td: timedelta) -> str:
 
 
 if __name__ == "__main__":
-    tdy = date.today()
+    # tdy = date.today()
     # if csv_file_path.exists():
     #     if date.fromtimestamp(csv_file_path.stat().st_mtime) < tdy:
     #         main()
     #     else:
     #         print("\n\nYOU'VE ALREADY RUN THE SCRIPT TODAY !!! \n")
     # else:
-    main(tdy)
+    main()
