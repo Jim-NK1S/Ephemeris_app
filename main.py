@@ -183,18 +183,21 @@ Mirror Date is →  {mirror.strftime("%a, %b %d, %Y")}
     with open(txt_file_path, "w", encoding="utf-8") as file:
         file.write(results + "\n")
 
-    # # Print to csv file:
+    # Print to csv file:
     file_exists = csv_file_path.exists()
 
-    if date.fromtimestamp(csv_file_path.stat().st_mtime) < tdy:
-        with open(csv_file_path, mode="a", newline="", encoding="utf-8") as f:
+    tdy_wk_num = tdy.isocalendar()[1]
+    csv_mod = date.fromtimestamp(csv_file_path.stat().st_mtime).isocalendar()[1]
+
+    if file_exists and csv_mod < tdy_wk_num and csv_mod%2 == 0:
+         with open(csv_file_path, mode="a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=csv_data.keys())
             if not file_exists:
                 writer.writeheader()
 
             writer.writerow(csv_data)
-    else:
-        print("\n\nYOU'VE ALREADY RUN THE SCRIPT TODAY !!! \n")
+    elif not file_exists:
+        print("\nSORRY ... this file does not exist.\n")
 
 
 # ****************************************
