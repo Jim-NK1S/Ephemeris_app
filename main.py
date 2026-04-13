@@ -4,7 +4,7 @@
 # SUNNY TIMES - Sunrise, Sunset facts
 # Author: James Alix
 # Created: Aug 21, 2025 @ 13:35
-# Modified: Apr 1, 2026 @ 16:39
+# Modified: Apr 11, 2026 @ 11:49
 # ****************************************
 import csv
 import logging
@@ -182,23 +182,30 @@ Mirror Date is →  {mirror.strftime("%a, %b %d, %Y")}
     # Print to text file:
     with open(txt_file_path, "w", encoding="utf-8") as file:
         file.write(results + "\n")
+    logger.info(f"Modified date for text file is: {datetime.fromtimestamp(txt_file_path.stat().st_mtime)}")
+    logger.info(f'Txt wkday: {datetime.fromtimestamp(txt_file_path.stat().st_mtime).isoweekday()}')
 
     # Print to csv file:
     file_exists = csv_file_path.exists()
 
     tdy_wk_num = tdy.isocalendar()[1]
-    csv_mod = date.fromtimestamp(csv_file_path.stat().st_mtime).isocalendar()[1]
+    csv_mod = date.fromtimestamp(csv_file_path.stat().st_mtime)
+    csv_mod_wkday_num = csv_mod.isoweekday()
 
-    if file_exists and csv_mod < tdy_wk_num and csv_mod%2 == 0:
+    logger.info(f"Modified date for csv file is: {datetime.fromtimestamp(csv_file_path.stat().st_mtime)}")
+    logger.info(f'Txt wkday: {datetime.fromtimestamp(csv_file_path.stat().st_mtime).isoweekday()}')
+
+    if file_exists and csv_mod_wkday_num != 1 and csv_mod < tdy:
          with open(csv_file_path, mode="a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=csv_data.keys())
             if not file_exists:
                 writer.writeheader()
 
             writer.writerow(csv_data)
-    elif not file_exists:
-        print("\nSORRY ... this file does not exist.\n")
 
+         print("csv file has been updated at {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+    else:
+        print("The csv file already exists for this week.")
 
 # ****************************************
 
