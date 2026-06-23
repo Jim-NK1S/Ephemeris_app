@@ -4,22 +4,20 @@
 # SUNNY TIMES - Sunrise, Sunset facts
 # Author: James Alix
 # Created: Aug 21, 2025 @ 13:35
-# Modified: Apr 11, 2026 @ 11:49
+# Modified: Jun 22, 2026 @ 14:45
 # ****************************************
 import csv
 import logging
-from pathlib import Path
-from datetime import date, timedelta, datetime
 import math
+from datetime import date, datetime, timedelta
+from pathlib import Path
 import ephem
 from ephem import Observer
 
-from testing import tdy_start
-
 # ---------- Set up LOGGER
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-formatter = logging.Formatter("%(asctime)s:%(levelname)s:%(name)s:%(message)s")
+logger.setLevel(logging.WARNING)
+formatter = logging.Formatter('%(asctime)s [%(levelname)s] (%(filename)s:%(lineno)d) %(message)s')
 file_handler = logging.FileHandler("sunny_times.log")
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
@@ -31,13 +29,6 @@ output_dir: Path = path / "Sun_output"
 txt_file_path: Path = output_dir / "ephemeris_info.txt"
 csv_file_path: Path = output_dir / "daylight_info.csv"
 
-# Compute the mirror date from today:
-tdy = date.today()
-summer_sol = date(2026, 6, 21)
-diff = summer_sol - tdy
-mirror = summer_sol + diff
-tdy_mirror = ephem.Date(f'{mirror.year}/{mirror.month}/{mirror.day} 01:00:00')
-
 
 def main():
     """Retrieves the time of sunrise and
@@ -47,9 +38,10 @@ def main():
 
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # SET BASE INFORMATION FOR THE OBSERVER --->
-    # Coordinates are for home @ 233 Liberty Ln, Harrisville RI:
-    start_tdy = ephem.Date(f'{tdy.year}/{tdy.month}/{tdy.day} 01:00:00')
+    # SET BASE INFORMATION FOR THE OBSERVER ---> 233 Liberty Ln, Harrisville RI:
+    tdy = date.today()
+    dt = datetime.now()
+    start_tdy = ephem.Date(f"{tdy.year}/{tdy.month}/{tdy.day} 01:00:00")
     home: Observer = ephem.Observer()
     home.lat = "41.96247219"
     home.lon = "-71.677855830"
@@ -63,23 +55,32 @@ def main():
     local_sunrise = ephem.localtime(sunrise)
     sunset = home.next_setting(sun, start=start_tdy)
     local_sunset = ephem.localtime(sunset)
-    # Compute length of daylight:
+
+    # Compute length of daylight & solar noon:
     daylight: timedelta = local_sunset - local_sunrise
     tdy_daylight: str = format_timedelta_hms(daylight)
     transit_time = home.next_transit(sun)  # solar noon
     tran_time = ephem.localtime(transit_time)  # solar noon local time
-    # Compute solar noon and max elevation:
+
+    # Compute max elevation:
     max_alt_degrees = float(sun.alt) * 180 / ephem.pi
     max_alt_deg_2 = round(math.degrees(float(sun.alt)), 1)
-    # Get date of last solstice (horizon still 0º ):
-    last_solstice = find_previous_solstice(tdy)
-    sol_daylight: timedelta = get_daylight_diff(last_solstice[0], home)
 
-    # Calculates difference in daylight between today and solstice:
-    if last_solstice[1] == "summer":
-        diff = format_timedelta_hms(sol_daylight - daylight)
-    else:
-        diff = format_timedelta_hms(daylight - sol_daylight)
+    # Get the date of last solstice (horizon still 0º):
+    next_solstice = ephem.next_solstice(start_tdy)
+    last_solstice = ephem.previous_solstice(start_tdy)
+
+    next = next_solstice.datetime()
+    last = last_solstice.datetime()
+    next_format = next.strftime("%B %d, %Y, %H:%M:%S")
+    logger.info(f"Next solstice: {next}")
+    logger.info(f"Last Solstice: {last}")
+
+    sol_daylight = get_solstice_daylight(next, home)  # , daylight
+    sol_daylight_diff = daylight - sol_daylight
+
+    diff = format_timedelta_hms(sol_daylight_diff)
+    logger.info(f"daylight diff: {sol_daylight_diff}")
 
     # Times for civil twilight:
     home.horizon = "-6"
@@ -89,25 +90,27 @@ def main():
     home.date = sunrise
     home.horizon = "0"
     sun.compute(home)
-    azimuth_rise = (round(math.degrees(float(sun.az)), 1))
+    azimuth_rise = round(math.degrees(float(sun.az)), 1)
     home.date = sunset
     home.horizon = "0"
     sun.compute(home)
-    azimuth_set = (round(math.degrees(float(sun.az)), 1))
+    azimuth_set = round(math.degrees(float(sun.az)), 1)
 
     # Retrieve info about Moon:
+    moon.compute()
     moon_rise = home.next_rising(moon, start=start_tdy)
+    current_phase = moon.phase
     full_moon = ephem.next_full_moon(start_tdy)
     new_moon = ephem.next_new_moon(start_tdy)
 
     # Get some sun info for mirror date:
-    # home.date = tdy_mirror
-    mirror_sunrise = home.next_rising(sun, start=tdy_mirror)
+    day_mirror = mirror_date_info(tdy)
+
+    mirror_sunrise = home.next_rising(sun, start=day_mirror)
     local_mirror_sunrise = ephem.localtime(mirror_sunrise)
     home.date = mirror_sunrise
     sun.compute(home)
-    mirror_az = (round(math.degrees(float(sun.az)), 1))
-    mirror_alt = float(sun.alt) * 180 / ephem.pi
+    mirror_az = round(math.degrees(float(sun.az)), 1)
 
     # Set up variables for printing:
     date_today = tdy.strftime("%a, %b %d, %Y")
@@ -120,9 +123,10 @@ def main():
     length = "Length of Daylight"
     solar_noon = "Solar Noon"
     max_elev = "Max Sun Elevation"
-    last = "Last Solstice"
+    next_ = "Next Solstice"
     lost = "Daylight Difference"
     moon_up = "Moon Rise"
+    m_phase = "Current Moon Phase"
     next_full = "Next Full Moon"
     next_new = "Next New Moon"
     mirror_rise = "Sunrise @ mirror date"
@@ -130,7 +134,7 @@ def main():
 
     # Console text:
     results: str = f"""
-Information for {date_today}
+===== Information for {date_today} =====
 
 {first_light:.<24} {am_twilight.strftime("%H:%M:%S")}
 {rise:.<24} {local_sunrise.strftime("%H:%M:%S")}
@@ -144,16 +148,17 @@ Information for {date_today}
 
 {length:.<24} {tdy_daylight}
 
-{last:.<24} {last_solstice[0].strftime("%a, %b %d @ %H:%M")}
+{next_:.<24} {next_format}
 {lost:.<24} {diff}
 
 {moon_up:.<24} {ephem.localtime(moon_rise).strftime("%H:%M:%S")}
+{m_phase:.<24}  {current_phase:.2f}%
 {next_full:.<24} {ephem.localtime(full_moon).strftime("%a, %b %d %Y @ %H:%M")}
 {next_new:.<24} {ephem.localtime(new_moon).strftime("%a, %b %d %Y @ %H:%M")}
 
 ****************************************
 
-Mirror Date is →  {mirror.strftime("%a, %b %d, %Y")}
+Mirror Date is →  {day_mirror.strftime("%a, %b %d, %Y")}
 
 {mirror_rise:.<24} {local_mirror_sunrise.strftime("%H:%M:%S")}
 {mirror_azimuth:.<24} {mirror_az}
@@ -170,7 +175,7 @@ Mirror Date is →  {mirror.strftime("%a, %b %d, %Y")}
         "Solar Noon": tran_time.strftime("%H:%M:%S"),
         "Sun Elevation": round(max_alt_degrees, 2),
         "Length of Daylight": tdy_daylight,
-        "Mirror Date": mirror,
+        "Mirror Date": day_mirror,
     }
     # ****************************************
 
@@ -182,70 +187,65 @@ Mirror Date is →  {mirror.strftime("%a, %b %d, %Y")}
     # Print to text file:
     with open(txt_file_path, "w", encoding="utf-8") as file:
         file.write(results + "\n")
-    logger.info(f"Modified date for text file is: {datetime.fromtimestamp(txt_file_path.stat().st_mtime)}")
-    logger.info(f'Txt wkday: {datetime.fromtimestamp(txt_file_path.stat().st_mtime).isoweekday()}')
+    logger.debug(
+        f"Modified date for text file is: {datetime.fromtimestamp(txt_file_path.stat().st_mtime)}"
+    )
+    logger.debug(
+        f"Txt wkday: {datetime.fromtimestamp(txt_file_path.stat().st_mtime).isoweekday()}"
+    )
 
     # Print to csv file:
     file_exists = csv_file_path.exists()
 
-    tdy_wk_num = tdy.isocalendar()[1]
+    tdy_wk_num = tdy.isoweekday()
     csv_mod = date.fromtimestamp(csv_file_path.stat().st_mtime)
+    csv_mod_dt = datetime.fromtimestamp(csv_file_path.stat().st_mtime)
     csv_mod_wkday_num = csv_mod.isoweekday()
 
-    logger.info(f"Modified date for csv file is: {datetime.fromtimestamp(csv_file_path.stat().st_mtime)}")
-    logger.info(f'Txt wkday: {datetime.fromtimestamp(csv_file_path.stat().st_mtime).isoweekday()}')
+    logger.debug(
+        f"Modified date for csv file is: {datetime.fromtimestamp(csv_file_path.stat().st_mtime)}"
+    )
+    logger.debug(
+        f"csv wkday: {datetime.fromtimestamp(csv_file_path.stat().st_mtime).isoweekday()}"
+    )
+    logger.debug(f"csv_mod_wkday_num: {csv_mod_wkday_num}")
 
-    if file_exists and csv_mod_wkday_num != 1 and csv_mod < tdy:
-         with open(csv_file_path, mode="a", newline="", encoding="utf-8") as f:
+    if file_exists and tdy_wk_num == 2 and csv_mod < tdy:
+        with open(csv_file_path, mode="a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=csv_data.keys())
             if not file_exists:
                 writer.writeheader()
 
             writer.writerow(csv_data)
 
-         print("csv file has been updated at {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}")
+        print(f"csv file has been updated on {csv_mod_dt.strftime('%b %d %Y @ %H:%M:%S')}")
     else:
-        print("The csv file already exists for this week.")
+        print(f"The csv file already exists for this week (saved on {csv_mod_dt.strftime('%b %d %Y @ %H:%M:%S')}.")
+
 
 # ****************************************
 
-def find_previous_solstice(given_date: date) -> tuple:
-    """
-    Finds the most recent solstice before given_date.
-    """
-    prev_summer = None
-    prev_winter = None
+def mirror_date_info(tdy: date) -> date:
+    next_solstice = ephem.next_solstice(tdy)
 
-    try:
-        prev_summer = ephem.previous_summer_solstice(tdy_start)
-    except Exception as e:
-        logger.warning("Could not determine previous summer solstice: %s", e)
+    next = next_solstice.datetime()
+    next_date = next.date()
 
-    try:
-        prev_winter = ephem.previous_winter_solstice(tdy_start)
-    except Exception as e:
-        logger.warning("Could not determine previous winter solstice: %s", e)
-
-    if prev_summer and prev_winter:
-        if prev_summer > prev_winter:
-            return prev_summer.datetime(), "summer"
-        return prev_winter.datetime(), "winter"
-    elif prev_summer:
-        return prev_summer.datetime(), "summer"
-    elif prev_winter:
-        return prev_winter.datetime(), "winter"
-    else:
-        raise RuntimeError("Can't find any solstice")
+    diff = next_date - tdy
+    mirror = next_date + diff
+    return mirror
 
 
-def get_daylight_diff(sol_date: date, home):
-    sol_rise = ephem.localtime(home.previous_rising(ephem.Sun(), start=sol_date))
-    sol_set = ephem.localtime(home.next_setting(ephem.Sun(), start=sol_date))
-    daylight = sol_set - sol_rise
-
-    logger.info(f"sol_date: {sol_date}")
-    logger.info(f"Sol_rise: {sol_rise}; sol_set: {sol_set}; daylight: {daylight}")
-    return daylight
+def get_solstice_daylight(next_solstice, home):
+    solstice = ephem.Date(f"{next_solstice.year}/{next_solstice.month}/{next_solstice.day} 01:00:00")
+    sol_ephem_date = ephem.Date(solstice)
+    logger.info(f"Solstice daylight date: {sol_ephem_date}")
+    sol_rise = ephem.localtime(home.next_rising(ephem.Sun(), start=sol_ephem_date))
+    sol_set = ephem.localtime(home.next_setting(ephem.Sun(), start=sol_ephem_date))
+    logger.info(f"Solstice rise: {sol_rise}; Sostice set: {sol_set}")
+    solstice_len_daylight = sol_set - sol_rise
+    logger.info(f"Daylight on next solstice: {solstice_len_daylight}")
+    return solstice_len_daylight
 
 
 def format_timedelta_hms(td: timedelta) -> str:
@@ -257,11 +257,4 @@ def format_timedelta_hms(td: timedelta) -> str:
 
 
 if __name__ == "__main__":
-    # tdy = date.today()
-    # if csv_file_path.exists():
-    #     if date.fromtimestamp(csv_file_path.stat().st_mtime) < tdy:
-    #         main()
-    #     else:
-    #         print("\n\nYOU'VE ALREADY RUN THE SCRIPT TODAY !!! \n")
-    # else:
     main()
