@@ -73,14 +73,20 @@ def main():
     next = next_solstice.datetime()
     last = last_solstice.datetime()
     next_format = next.strftime("%B %d, %Y, %H:%M:%S")
+    last_format = last.strftime("%B %d, %Y, %H:%M:%S")
     logger.info(f"Next solstice: {next}")
     logger.info(f"Last Solstice: {last}")
 
-    sol_daylight = get_solstice_daylight(next, home)  # , daylight
-    sol_daylight_diff = daylight - sol_daylight
+    next_sol_daylight = solstice_daylight(next, home)  # , daylight
+    next_sol_daylight_diff = daylight - next_sol_daylight
+    last_sol_daylight = solstice_daylight(last, home)
+    last_sol_daylight_diff = last_sol_daylight - daylight
+    logger.info(f"Diff daylight last solstice: {last_sol_daylight_diff}")
 
-    diff = format_timedelta_hms(sol_daylight_diff)
-    logger.info(f"daylight diff: {sol_daylight_diff}")
+
+    diff = format_timedelta_hms(next_sol_daylight_diff)
+    logger.info(f"daylight diff: {next_sol_daylight_diff}")
+    diff1 = format_timedelta_hms(last_sol_daylight_diff)
 
     # Times for civil twilight:
     home.horizon = "-6"
@@ -125,6 +131,8 @@ def main():
     max_elev = "Max Sun Elevation"
     next_ = "Next Solstice"
     lost = "Daylight Difference"
+    last = "Last Solstice"
+    lost1 = "Daylight Difference"
     moon_up = "Moon Rise"
     m_phase = "Current Moon Phase"
     next_full = "Next Full Moon"
@@ -150,6 +158,8 @@ def main():
 
 {next_:.<24} {next_format}
 {lost:.<24} {diff}
+{last:.<24} {last_format}
+{lost1:.<24} {diff1}
 
 {moon_up:.<24} {ephem.localtime(moon_rise).strftime("%H:%M:%S")}
 {m_phase:.<24}  {current_phase:.2f}%
@@ -220,7 +230,7 @@ Mirror Date is →  {day_mirror.strftime("%a, %b %d, %Y")}
 
         print(f"csv file has been updated on {csv_mod_dt.strftime('%b %d %Y @ %H:%M:%S')}")
     else:
-        print(f"The csv file already exists for this week (saved on {csv_mod_dt.strftime('%b %d %Y @ %H:%M:%S')}.")
+        print(f"The csv file already saved for this week \n(saved on {csv_mod_dt.strftime('%b %d %Y @ %H:%M:%S')})")
 
 
 # ****************************************
@@ -236,7 +246,7 @@ def mirror_date_info(tdy: date) -> date:
     return mirror
 
 
-def get_solstice_daylight(next_solstice, home):
+def solstice_daylight(next_solstice, home):
     solstice = ephem.Date(f"{next_solstice.year}/{next_solstice.month}/{next_solstice.day} 01:00:00")
     sol_ephem_date = ephem.Date(solstice)
     logger.info(f"Solstice daylight date: {sol_ephem_date}")
@@ -244,7 +254,7 @@ def get_solstice_daylight(next_solstice, home):
     sol_set = ephem.localtime(home.next_setting(ephem.Sun(), start=sol_ephem_date))
     logger.info(f"Solstice rise: {sol_rise}; Sostice set: {sol_set}")
     solstice_len_daylight = sol_set - sol_rise
-    logger.info(f"Daylight on next solstice: {solstice_len_daylight}")
+    logger.info(f"Daylight on solstice: {solstice_len_daylight}")
     return solstice_len_daylight
 
 
