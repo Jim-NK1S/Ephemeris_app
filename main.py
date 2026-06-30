@@ -16,7 +16,7 @@ from ephem import Observer
 
 # ---------- Set up LOGGER
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.WARNING)
+logger.setLevel(logging.INFO)
 formatter = logging.Formatter('%(asctime)s [%(levelname)s] (%(filename)s:%(lineno)d) %(message)s')
 file_handler = logging.FileHandler("sunny_times.log")
 file_handler.setFormatter(formatter)
@@ -41,6 +41,7 @@ def main():
     # SET BASE INFORMATION FOR THE OBSERVER ---> 233 Liberty Ln, Harrisville RI:
     tdy = date.today()
     dt = datetime.now()
+    logger.info(f"TDY: {tdy}")
     start_tdy = ephem.Date(f"{tdy.year}/{tdy.month}/{tdy.day} 01:00:00")
     home: Observer = ephem.Observer()
     home.lat = "41.96247219"
@@ -74,18 +75,18 @@ def main():
     last = last_solstice.datetime()
     next_format = next.strftime("%B %d, %Y, %H:%M:%S")
     last_format = last.strftime("%B %d, %Y, %H:%M:%S")
-    logger.info(f"Next solstice: {next}")
-    logger.info(f"Last Solstice: {last}")
+    # logger.info(f"Next solstice: {next}")
+    # logger.info(f"Last Solstice: {last}")
 
     next_sol_daylight = solstice_daylight(next, home)  # , daylight
     next_sol_daylight_diff = daylight - next_sol_daylight
     last_sol_daylight = solstice_daylight(last, home)
     last_sol_daylight_diff = last_sol_daylight - daylight
-    logger.info(f"Diff daylight last solstice: {last_sol_daylight_diff}")
+    # logger.info(f"Diff daylight last solstice: {last_sol_daylight_diff}")
 
 
     diff = format_timedelta_hms(next_sol_daylight_diff)
-    logger.info(f"daylight diff: {next_sol_daylight_diff}")
+    # logger.info(f"daylight diff: {next_sol_daylight_diff}")
     diff1 = format_timedelta_hms(last_sol_daylight_diff)
 
     # Times for civil twilight:
@@ -207,20 +208,14 @@ Mirror Date is →  {day_mirror.strftime("%a, %b %d, %Y")}
     # Print to csv file:
     file_exists = csv_file_path.exists()
 
-    tdy_wk_num = tdy.isoweekday()
-    csv_mod = date.fromtimestamp(csv_file_path.stat().st_mtime)
-    csv_mod_dt = datetime.fromtimestamp(csv_file_path.stat().st_mtime)
-    csv_mod_wkday_num = csv_mod.isoweekday()
+    day_num = dt.isoweekday()
+    csv_mod = datetime.fromtimestamp(csv_file_path.stat().st_mtime)
+    # csv_mod_dt = datetime.fromtimestamp(csv_file_path.stat().st_mtime)
+    mod_num = csv_mod.isoweekday()
+    logger.info(f"csv modified date: {csv_mod}")
+    logger.info(f"csv modified day number: {mod_num}")
 
-    logger.debug(
-        f"Modified date for csv file is: {datetime.fromtimestamp(csv_file_path.stat().st_mtime)}"
-    )
-    logger.debug(
-        f"csv wkday: {datetime.fromtimestamp(csv_file_path.stat().st_mtime).isoweekday()}"
-    )
-    logger.debug(f"csv_mod_wkday_num: {csv_mod_wkday_num}")
-
-    if file_exists and tdy_wk_num == 2 and csv_mod < tdy:
+    if file_exists and day_num == 2 and mod_num < day_num:
         with open(csv_file_path, mode="a", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=csv_data.keys())
             if not file_exists:
@@ -228,9 +223,9 @@ Mirror Date is →  {day_mirror.strftime("%a, %b %d, %Y")}
 
             writer.writerow(csv_data)
 
-        print(f"csv file has been updated on {csv_mod_dt.strftime('%b %d %Y @ %H:%M:%S')}")
+        print(f"csv file has been updated on {csv_mod.strftime('%b %d %Y @ %H:%M:%S')}")
     else:
-        print(f"The csv file already saved for this week \n(saved on {csv_mod_dt.strftime('%b %d %Y @ %H:%M:%S')})")
+        print(f"The csv file already saved for this week \n(saved on {csv_mod.strftime('%b %d %Y @ %H:%M:%S')})")
 
 
 # ****************************************
